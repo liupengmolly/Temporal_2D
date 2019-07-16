@@ -8,14 +8,15 @@ import torch.utils.data
 import logging
 import torchvision.transforms as transforms
 import torch.optim as optim
+from collections import OrderedDict
 
-from utils.Config import cfg
-from utils.loss import JointsMSELoss
-from utils.H36m import H36m
-from utils.evaluate import *
-from utils.imutils import *
+from Config import cfg
+from lib.loss import JointsMSELoss
+from lib.data.H36m import H36m
+from lib.evaluate import *
+from lib.imutils import *
 from models.Simple_baseline import get_pose_net
-
+from models.LSTM_2D import get_model, get_lstm
 
 def train(cfg, train_loader, model, criterion, optimizer, epoch):
     batch_time = AverageMeter()
@@ -39,9 +40,21 @@ def train(cfg, train_loader, model, criterion, optimizer, epoch):
         target = target.cuda(non_blocking = True)
 
         loss = criterion(output, target)
+        output = output.detach().cpu().numpy()
+        target = target.detach().cpu().numpy()
 
         optimizer.zero_grad()
         loss.backward()
+
+        '''
+        if loss.data < 50:
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if param.grad is not None:
+                        print(name, param.grad.data.sum())
+                    else:
+                        print(name, "None")
+        '''
         optimizer.step()
 
         losses.update(loss.item(), input.size(0))
@@ -52,7 +65,7 @@ def train(cfg, train_loader, model, criterion, optimizer, epoch):
         batch_time.update(time.time()-begin)
         begin = time.time()
 
-        if bidx % cfg.log_freq == 0:
+        if bidx % cfg.log_freq == 0 or bidx+1 == len(train_loader):
             msg = 'Epoch: [{0}][{1}/{2}]\t' \
                   'Time {batch_time.val:.3f}s ({batch_time.avg:.3f}s)\t' \
                   'Speed {speed:.1f} samples/s\t' \
@@ -70,10 +83,6 @@ def validate(cfg, valid_loader, model, criterion):
     acc = AverageMeter()
 
     model.eval()
-
-    all_preds = []
-    all_boxes = []
-
     with torch.no_grad():
         begin = time.time()
         for bidx, (inputs, targets, meta) in enumerate(valid_loader):
@@ -102,7 +111,7 @@ def validate(cfg, valid_loader, model, criterion):
                     fscore = fscore.transpose((1, 2, 0))
                     fscore = cv2.flip(fscore, 1)
                     fscore = list(fscore.transpose((2, 0, 1)))
-                    for (q, w) in cfg.symmetry:
+                    for (q, w) in cfg.symmetry_h36m:
                         fscore[q], fscore[w] = fscore[w], fscore[q]
                     fscore = np.array(fscore)
                     score_map[i] += fscore
@@ -182,13 +191,31 @@ def validate(cfg, valid_loader, model, criterion):
     return acc.avg
 
 def main(cfg):
-    # os.environ['CUDA_VISIBLE_DEVICES'] = cfg.gpu
+    os.environ['CUDA_VISIBLE_DEVICES'] = cfg.gpus
     if not os.path.isdir(cfg.checkpoint):
         os.makedirs(cfg.checkpoint)
 
-    model = get_pose_net(cfg)
-    gpus = [int(i) for i in cfg.gpus.split(',')]
-    model = torch.nn.DataParallel(model, device_ids=gpus).cuda()
+    # model = get_pose_net(cfg)
+    model = get_model()
+
+    #model = get_lstm()
+
+    # gpus = [int(i) for i in cfg.gpus.split(',')]
+    cudnn.benchmark = True
+
+    if cfg.ckpt:
+        ckpt = torch.load(cfg.ckpt)['state_dict']
+        new_state_dict = OrderedDict()
+        for k, v in ckpt.items():
+            name = k[7:]
+            new_state_dict[name] = v
+        model.load_state_dict(new_state_dict)
+    model = torch.nn.DataParallel(model).cuda()
+    '''
+    # 单GPU
+    torch.cuda.set_device(3)
+    model = model.cuda()
+    '''
 
     cudnn.benchmark = True
 
@@ -204,7 +231,7 @@ def main(cfg):
         H36m(cfg,'data/images',True),
         batch_size = cfg.batch_size,
         shuffle = True,
-        num_workers = 8,
+        num_workers = 1,
         pin_memory = True
     )
 
@@ -212,7 +239,7 @@ def main(cfg):
         H36m(cfg,'data/images',False),
         batch_size = cfg.batch_size,
         shuffle = False,
-        num_workers = 8,
+        num_workers = 1,
         pin_memory = True
     )
 
@@ -220,27 +247,27 @@ def main(cfg):
     for epoch in range(cfg.epoch):
         lr_scheduler.step()
 
-        train(cfg, train_loader, model, criterion, optimizer, epoch)
+        # train(cfg, train_loader, model, criterion, optimizer, epoch)
 
         acc = validate(cfg, valid_loader, model, criterion)
 
-        if acc > best_acc:
-            best_acc = acc
-            torch.save({
-                'epoch': epoch + 1,
-                'model': cfg.model,
-                'state_dict': model.state_dict(),
-                'acc': acc,
-                'optimizer': optimizer.state_dict()
-            }, 'checkpoint/{}_epoch_{}'.format(cfg.model, epoch))
+        # if acc > best_acc:
+        #     best_acc = acc
+        #     torch.save({
+        #         'epoch': epoch + 1,
+        #         'model': cfg.model,
+        #         'state_dict': model.state_dict(),
+        #         'acc': acc,
+        #         'optimizer': optimizer.state_dict()
+        #     }, 'checkpoint/{}_epoch_{}'.format(cfg.model, epoch))
 
 
 if __name__ == '__main__':
     logging.basicConfig(
-        filename="/home/liupeng/workspace/Temporal_2D/log/log_{}_e{}".format(cfg.model,
-                                                                             cfg.epoch),
+        filename="/home/liupeng/workspace/Temporal_2D/log/log_{}".format(cfg.model),
         filemode="w",
         format="%(asctime)s-%(name)s-%(levelname)s-%(message)s",
         level=logging.INFO
     )
+    print(cfg.model, cfg.epoch)
     main(cfg)

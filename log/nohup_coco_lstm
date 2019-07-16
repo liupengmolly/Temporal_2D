@@ -1,0 +1,12 @@
+/usr/local/lib/python3.5/dist-packages/torch/nn/_reduction.py:46: UserWarning: size_average and reduce args will be deprecated, please use reduction='mean' instead.
+  warnings.warn(warning.format(ret))
+Traceback (most recent call last):
+  File "coco_train.py", line 279, in <module>
+    main(cfg)
+  File "coco_train.py", line 206, in main
+    optimizer = optim.Adam(model.parameters(), lr=cfg.lr)
+  File "/usr/local/lib/python3.5/dist-packages/torch/optim/adam.py", line 42, in __init__
+    super(Adam, self).__init__(params, defaults)
+  File "/usr/local/lib/python3.5/dist-packages/torch/optim/optimizer.py", line 45, in __init__
+    raise ValueError("optimizer got an empty parameter list")
+ValueError: optimizer got an empty parameter list

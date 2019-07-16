@@ -56,8 +56,8 @@ def vis_img(path, cfg):
 
 
 if __name__ == '__main__':
-    matplotlib.use('TKAgg')
+    #matplotlib.use('TKAgg')
     output, points = vis_img('data/images/s_11_act_16_subact_02_ca_04/'
-                             's_11_act_16_subact_02_ca_04_001111.jpg', cfg)
+                             's_11_act_16_subact_02_ca_04_000101.jpg', cfg)
     print(output)
     print(points)

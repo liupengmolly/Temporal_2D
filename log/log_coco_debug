@@ -1,0 +1,6 @@
+2019-07-15 23:56:22,609-lib.data.coco-INFO-=> classes: ['__background__', 'person']
+2019-07-15 23:56:22,615-lib.data.coco-INFO-=> num_images: 118287
+2019-07-15 23:57:07,004-lib.data.coco-INFO-=> load 149813 samples
+2019-07-15 23:57:07,248-lib.data.coco-INFO-=> classes: ['__background__', 'person']
+2019-07-15 23:57:07,249-lib.data.coco-INFO-=> num_images: 5000
+2019-07-15 23:57:08,977-lib.data.coco-INFO-=> load 6352 samples

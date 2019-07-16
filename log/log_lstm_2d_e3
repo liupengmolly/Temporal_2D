@@ -1,0 +1,6 @@
+2019-07-10 17:54:02,556-root-INFO-Epoch: [0][0/26016]	Time 4.363s (4.363s)	Speed 2.8 samples/s	Data 0.280s (0.280s)	Loss 68.12137 (68.12137)	Accuracy 0.034 (0.034)
+2019-07-10 17:54:09,255-root-INFO-Test: [0/5300]	Time 0.439 (0.439)	Loss 67.8532 (67.8532)	Accuracy 0.000 (0.000)
+2019-07-10 17:54:12,390-root-INFO-Epoch: [1][0/26016]	Time 0.850s (0.850s)	Speed 14.1 samples/s	Data 0.236s (0.236s)	Loss 67.53604 (67.53604)	Accuracy 0.034 (0.034)
+2019-07-10 17:54:19,121-root-INFO-Test: [0/5300]	Time 0.427 (0.427)	Loss 67.7215 (67.7215)	Accuracy 0.000 (0.000)
+2019-07-10 17:54:22,335-root-INFO-Epoch: [2][0/26016]	Time 0.831s (0.831s)	Speed 14.4 samples/s	Data 0.214s (0.214s)	Loss 64.32182 (64.32182)	Accuracy 0.142 (0.142)
+2019-07-10 17:54:29,108-root-INFO-Test: [0/5300]	Time 0.448 (0.448)	Loss 64.3032 (64.3032)	Accuracy 0.029 (0.029)
