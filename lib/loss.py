@@ -33,4 +33,19 @@ class JointsMSELoss(nn.Module):
             else:
                 loss += 0.5 * self.criterion(heatmap_pred, heatmap_gt)
 
-        return loss
+        return loss / num_joints
+
+class MultiJointsMSELoss(JointsMSELoss):
+    def __init__(self, use_target_weight, temporal):
+        super(MultiJointsMSELoss, self).__init__(use_target_weight)
+        self.temporal = temporal
+
+    def forward(self, outputs, targets, target_weight=None):
+        # 因为有个init_heatmap 所以第一张图会算两次
+        # losses = []
+        loss = 0.0
+        # losses.append(super().forward(outputs[0],targets[:,0,:,:,:]))
+        for i in range(self.temporal):
+            loss += super().forward(outputs[i], targets[:,i,:,:,:])
+        return loss/self.temporal
+

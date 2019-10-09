@@ -133,7 +133,9 @@ class Bottleneck_CAFFE(nn.Module):
 
 class PoseResNet(nn.Module):
 
-    def __init__(self, block, layers, cfg, **kwargs):
+    def __init__(self, block, layers, cfg, out_planes=None, **kwargs):
+        if out_planes is None:
+            out_planes = cfg.num_class
         self.inplanes = 64
         self.deconv_with_bias = cfg.deconv_with_bias
 
@@ -158,7 +160,7 @@ class PoseResNet(nn.Module):
 
         self.final_layer = nn.Conv2d(
             in_channels=int(cfg.num_deconv_filters.split(',')[-1]),
-            out_channels=cfg.num_class,
+            out_channels=out_planes,
             kernel_size=cfg.final_conv_kernel,
             stride=1,
             padding=1 if cfg.final_conv_kernel == 3 else 0
@@ -295,12 +297,11 @@ resnet_spec = {18: (BasicBlock, [2, 2, 2, 2]),
                152: (Bottleneck, [3, 8, 36, 3])}
 
 
-def get_pose_net(cfg, **kwargs):
-    num_layers = cfg.res
+def get_pose_net(cfg, num_layers, out_planes=None, **kwargs):
 
     block_class, layers = resnet_spec[num_layers]
 
-    model = PoseResNet(block_class, layers, cfg, **kwargs)
+    model = PoseResNet(block_class, layers, cfg, out_planes, **kwargs)
 
     # if is_train and cfg.init_weights:
     #     model.init_weights(cfg.MODEL.PRETRAINED)

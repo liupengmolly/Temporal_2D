@@ -62,6 +62,7 @@ def accuracy(output, target, hm_type='gaussian', thr=0.5):
     First value to be returned is average accuracy across 'idxs',
     followed by individual accuracies
     '''
+    # 长度为num_joints
     idx = list(range(output.shape[1]))
     norm = 1.0
     if hm_type == 'gaussian':
@@ -77,7 +78,7 @@ def accuracy(output, target, hm_type='gaussian', thr=0.5):
     cnt = 0
 
     for i in range(len(idx)):
-        acc[i + 1] = dist_acc(dists[idx[i]])
+        acc[i + 1] = dist_acc(dists[idx[i]], thr)
         if acc[i + 1] >= 0:
             avg_acc = avg_acc + acc[i + 1]
             cnt += 1

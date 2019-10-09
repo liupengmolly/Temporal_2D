@@ -10,262 +10,249 @@ import torchvision.transforms as transforms
 import torch.optim as optim
 from collections import OrderedDict
 
+
 from Config import cfg
-from lib.loss import JointsMSELoss
-from lib.data.H36m import H36m
+from lib.loss import JointsMSELoss, MultiJointsMSELoss
+from lib.data.H36m import H36m, MultiH36m
 from lib.evaluate import *
 from lib.imutils import *
+
 from models.Simple_baseline import get_pose_net
-from models.LSTM_2D import get_model, get_lstm
+from models.LSTM_2D import get_model
 
 def train(cfg, train_loader, model, criterion, optimizer, epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter()
-    acc = AverageMeter()
+    # loss0 = AverageMeter()
+    # loss1 = AverageMeter()
+    # loss2 = AverageMeter()
+    # loss3 = AverageMeter()
+    # loss4 = AverageMeter()
+    # loss5 = AverageMeter()
+    loss_sum = AverageMeter()
+    acc0 = AverageMeter()
+    acc1 = AverageMeter()
+    acc2 = AverageMeter()
+    acc3 = AverageMeter()
+    acc4 = AverageMeter()
+    # acc5 = AverageMeter()
 
     model.train()
 
     begin = time.time()
     for bidx, (input, target) in enumerate(train_loader):
+        #对应shuffle为false,保证把训练数据巡练完
+        # if bidx>4:
+        #     break
         data_time.update(time.time() - begin)
 
         input = input.cuda()
-        output = model(input)
+        output, _, _ = model(input)
 
         if isinstance(target, np.ndarray):
             target = target.astype(np.float32)
         else:
             target = target.float()
-        target = target.cuda(non_blocking = True)
+        target = target.cuda(non_blocking=True)
 
         loss = criterion(output, target)
-        output = output.detach().cpu().numpy()
-        target = target.detach().cpu().numpy()
+        # loss = sum(losses)/len(losses)
 
         optimizer.zero_grad()
         loss.backward()
-
-        '''
-        if loss.data < 50:
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if param.grad is not None:
-                        print(name, param.grad.data.sum())
-                    else:
-                        print(name, "None")
-        '''
+        torch.nn.utils.clip_grad_norm(model.parameters(),1)
         optimizer.step()
 
-        losses.update(loss.item(), input.size(0))
-        _, avg_acc, cnt, pred = accuracy(output.detach().cpu().numpy(),
-                                        target.detach().cpu().numpy())
-        acc.update(avg_acc, cnt)
+        # loss0.update(losses[0], input.size(0))
+        # loss1.update(losses[1], input.size(0))
+        # loss2.update(losses[2], input.size(0))
+        # loss3.update(losses[3], input.size(0))
+        # loss4.update(losses[4], input.size(0))
+        # loss5.update(losses[5], input.size(0))
+        loss_sum.update(loss, input.size(0))
+
+        _, avg_acc0, cnt, _ = accuracy(output[0].detach().cpu().numpy(),
+                                       target[:,0].detach().cpu().numpy(), thr=cfg.ac_thr)
+        _, avg_acc1, cnt, _ = accuracy(output[1].detach().cpu().numpy(),
+                                       target[:,1].detach().cpu().numpy(), thr=cfg.ac_thr)
+        _, avg_acc2, cnt, _ = accuracy(output[2].detach().cpu().numpy(),
+                                       target[:,2].detach().cpu().numpy(), thr=cfg.ac_thr)
+        _, avg_acc3, cnt, _ = accuracy(output[3].detach().cpu().numpy(),
+                                       target[:,3].detach().cpu().numpy(), thr=cfg.ac_thr)
+        _, avg_acc4, cnt, _ = accuracy(output[4].detach().cpu().numpy(),
+                                       target[:,4].detach().cpu().numpy(), thr=cfg.ac_thr)
+        # _, avg_acc5, cnt, _ = accuracy(output[5].detach().cpu().numpy(), target[:,4].detach().cpu().numpy())
+        acc0.update(avg_acc0, cnt)
+        acc1.update(avg_acc1, cnt)
+        acc2.update(avg_acc2, cnt)
+        acc3.update(avg_acc3, cnt)
+        acc4.update(avg_acc4, cnt)
+        # acc5.update(avg_acc5, cnt)
 
         batch_time.update(time.time()-begin)
         begin = time.time()
 
         if bidx % cfg.log_freq == 0 or bidx+1 == len(train_loader):
-            msg = 'Epoch: [{0}][{1}/{2}]\t' \
-                  'Time {batch_time.val:.3f}s ({batch_time.avg:.3f}s)\t' \
-                  'Speed {speed:.1f} samples/s\t' \
-                  'Data {data_time.val:.3f}s ({data_time.avg:.3f}s)\t' \
-                  'Loss {loss.val:.5f} ({loss.avg:.5f})\t' \
-                  'Accuracy {acc.val:.3f} ({acc.avg:.3f})'.format(
-                epoch, bidx, len(train_loader), batch_time=batch_time,
-                speed=input.size(0) / batch_time.val,
-                data_time=data_time, loss=losses, acc=acc)
+            msg = 'Epoch: [{0}][{1}/{2}] ' \
+                  'loss {loss_sum.val:.5f} ({loss_sum.avg:.5f})\n' \
+                  'Ac0 {acc0.val:.3f} ({acc0.avg:.3f}) ' \
+                  'Ac1 {acc1.val:.3f} ({acc1.avg:.3f}) ' \
+                  'Ac2 {acc2.val:.3f} ({acc2.avg:.3f}) ' \
+                  'Ac3 {acc3.val:.3f} ({acc3.avg:.3f}) ' \
+                  'Ac4 {acc4.val:.3f} ({acc4.avg:.3f}) ' \
+                .format(epoch, bidx, len(train_loader), loss_sum=loss_sum,
+                        # loss0=loss0,loss1=loss1,loss2=loss2,loss3=loss3,loss4=loss4,
+                        acc0=acc0,acc1=acc1,acc2=acc2,acc3=acc3,acc4=acc4)
             logging.info(msg)
+
+        # if (bidx+1) % 1001 == 0:
+        #     break
 
 def validate(cfg, valid_loader, model, criterion):
     batch_time = AverageMeter()
-    losses = AverageMeter()
-    acc = AverageMeter()
+    loss_sum = AverageMeter()
+    # loss0 = AverageMeter()
+    # loss1 = AverageMeter()
+    # loss2 = AverageMeter()
+    # loss3 = AverageMeter()
+    # loss4 = AverageMeter()
+    acc0 = AverageMeter()
+    acc1 = AverageMeter()
+    acc2 = AverageMeter()
+    acc3 = AverageMeter()
+    acc4 = AverageMeter()
 
     model.eval()
     with torch.no_grad():
         begin = time.time()
-        for bidx, (inputs, targets, meta) in enumerate(valid_loader):
-            # full_gt.append(points.numpy())
-            # batch_kp_result = np.zeros((points.shape[0], 17, 2))
-            # batch_score_result = np.zeros((points.shape[0], 1))
-            input_var = torch.autograd.Variable(inputs.cuda())
-
-            output = model(input_var)
-            score_map = output.data.cpu().numpy()
-
-            #翻转
-            if cfg.flip:
-                flip_inputs = inputs.clone()
-                for i, finp in enumerate(flip_inputs):
-                    finp = im_to_numpy(finp)
-                    finp = cv2.flip(finp, 1)
-                    finp = np.transpose(finp, (2, 0, 1))
-                    finp = im_to_torch(finp)
-                    flip_inputs[i] = finp
-                flip_input_var = torch.autograd.Variable(flip_inputs.cuda())
-
-                flip_output = model(flip_input_var)
-                flip_score_map = flip_output.data.cpu().numpy()
-                for i, fscore in enumerate(flip_score_map):
-                    fscore = fscore.transpose((1, 2, 0))
-                    fscore = cv2.flip(fscore, 1)
-                    fscore = list(fscore.transpose((2, 0, 1)))
-                    for (q, w) in cfg.symmetry_h36m:
-                        fscore[q], fscore[w] = fscore[w], fscore[q]
-                    fscore = np.array(fscore)
-                    score_map[i] += fscore
-                    score_map[i] /= 2
+        for bidx, (inputs, targets) in enumerate(valid_loader):
+            inputs = inputs.cuda()
+            score_maps, _, _ = model(inputs)
 
             if isinstance(targets, np.ndarray):
                 targets = targets.astype(np.float32)
             else:
                 targets = targets.float()
             targets = targets.cuda(non_blocking=True)
-            score_map = torch.from_numpy(score_map).cuda(non_blocking=True)
-            loss = criterion(score_map, targets)
+
+            loss = criterion(score_maps, targets)
+            # loss = sum(losses)/len(losses)
+
             num_images = inputs.size(0)
-            losses.update(loss.item(), num_images)
-            _, avg_acc, cnt, pred = accuracy(score_map.cpu().numpy(),
-                                             targets.cpu().numpy())
-            acc.update(avg_acc, cnt)
+            # loss0.update(losses[0], inputs.size(0))
+            # loss1.update(losses[1], inputs.size(0))
+            # loss2.update(losses[2], inputs.size(0))
+            # loss3.update(losses[3], inputs.size(0))
+            # loss4.update(losses[4], inputs.size(0))
+            loss_sum.update(loss, num_images)
+
+            _, avg_acc0, cnt, _ = accuracy(score_maps[0].detach().cpu().numpy(),
+                                           targets[:, 0].detach().cpu().numpy(), thr=cfg.ac_thr)
+            _, avg_acc1, cnt, _ = accuracy(score_maps[1].detach().cpu().numpy(),
+                                           targets[:, 1].detach().cpu().numpy(), thr=cfg.ac_thr)
+            _, avg_acc2, cnt, _ = accuracy(score_maps[2].detach().cpu().numpy(),
+                                           targets[:, 2].detach().cpu().numpy(), thr=cfg.ac_thr)
+            _, avg_acc3, cnt, _ = accuracy(score_maps[3].detach().cpu().numpy(),
+                                           targets[:, 3].detach().cpu().numpy(), thr=cfg.ac_thr)
+            _, avg_acc4, cnt, _ = accuracy(score_maps[4].detach().cpu().numpy(),
+                                           targets[:, 4].detach().cpu().numpy(), thr=cfg.ac_thr)
+            # _, avg_acc5, cnt, _ = accuracy(output[5].detach().cpu().numpy(), target[:,4].detach().cpu().numpy())
+            acc0.update(avg_acc0, cnt)
+            acc1.update(avg_acc1, cnt)
+            acc2.update(avg_acc2, cnt)
+            acc3.update(avg_acc3, cnt)
+            acc4.update(avg_acc4, cnt)
 
             batch_time.update(time.time() - begin)
             begin = time.time()
 
-            if bidx % cfg.log_freq == 0:
-                msg = 'Test: [{0}/{1}]\t' \
-                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' \
-                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t' \
-                      'Accuracy {acc.val:.3f} ({acc.avg:.3f})'.format(
-                    bidx, len(valid_loader), batch_time=batch_time,
-                    loss=losses, acc=acc)
+            if bidx % cfg.log_freq == 0 or bidx+1==len(valid_loader):
+                msg = 'Test: [{0}/{1}] ' \
+                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})' \
+                      'Loss {loss.val:.4f} ({loss.avg:.4f})\n' \
+                      'Acc0 {acc0.val:.3f} ({acc0.avg:.3f}) ' \
+                      'Acc1 {acc1.val:.3f} ({acc1.avg:.3f}) ' \
+                      'Acc2 {acc2.val:.3f} ({acc2.avg:.3f}) ' \
+                      'Acc3 {acc3.val:.3f} ({acc3.avg:.3f}) ' \
+                      'Acc4 {acc4.val:.3f} ({acc4.avg:.3f}) ' \
+                    .format(bidx, len(valid_loader), batch_time=batch_time, loss=loss_sum,
+                    # loss0=loss0,loss1=loss1,loss2=loss2,loss3=loss3,loss4=loss4,
+                    acc0=acc0, acc1=acc1, acc2=acc2, acc3=acc3, acc4=acc4)
                 logging.info(msg)
 
-    #         for b in range(inputs.size(0)):
-    #
-    #             single_map = score_map[b]
-    #             r0 = single_map.copy()
-    #             r0 /= 255
-    #             r0 += 0.5
-    #             v_score = np.zeros(17)
-    #
-    #             for p in range(17):
-    #                 single_map[p] /= np.amax(single_map[p])
-    #                 # border的作用暂时不理解
-    #                 border = 10
-    #                 dr = np.zeros((cfg.output_H + 2*border, cfg.output_W + 2*border))
-    #                 dr[border:-border, border:-border] = single_map[p].copy()
-    #                 dr = cv2.GaussianBlur(dr, (21, 21), 0)
-    #                 lb = dr.argmax()
-    #                 y, x = np.unravel_index(lb, dr.shape)
-    #                 dr[y, x] = 0
-    #                 lb = dr.argmax()
-    #                 py, px = np.unravel_index(lb, dr.shape)
-    #                 y -= border
-    #                 x -= border
-    #                 py -= border + y
-    #                 px -= border + x
-    #                 ln = (px ** 2 + py ** 2) ** 0.5
-    #                 delta = 0.25
-    #                 if ln > 1e-3:
-    #                     x += delta * px / ln
-    #                     y += delta * py / ln
-    #                 x = max(0, min(x, cfg.output_W - 1))
-    #                 y = max(0, min(y, cfg.output_H - 1))
-    #                 img_h = meta['img_h'].numpy()[b]
-    #                 img_w = meta['img_w'].numpy()[b]
-    #                 pad_h = max(img_h, img_h*cfg.input_H/cfg.input_W)
-    #                 pad_w = pad_h * cfg.input_W / cfg.input_H
-    #                 resx = int(x * (pad_w / cfg.output_W) - (pad_w - img_w)/2)
-    #                 resy = int(y * (pad_h / cfg.output_H) - (pad_h - img_h)/2)
-    #                 v_score[p] = float(r0[p, int(round(y) + 1e-10), int(round(x) + 1e-10)])
-    #                 batch_kp_result[b,p,:] = np.array([resx, resy])
-    #
-    #             batch_score_result[b,0] = v_score.mean()
-    #
-    #         full_kp_result.append(batch_kp_result)
-    #         full_score_result.append(batch_score_result)
-    #
-    # h36m_2d_evaluate(full_kp_result, full_score_result, full_gt)
-    return acc.avg
+    return acc4.avg, loss_sum.avg
 
 def main(cfg):
     os.environ['CUDA_VISIBLE_DEVICES'] = cfg.gpus
     if not os.path.isdir(cfg.checkpoint):
         os.makedirs(cfg.checkpoint)
 
-    # model = get_pose_net(cfg)
-    model = get_model()
+    model = get_model('h36m',stages=cfg.stages)
 
-    #model = get_lstm()
-
-    # gpus = [int(i) for i in cfg.gpus.split(',')]
-    cudnn.benchmark = True
-
+    best_loss = 100.0
+    best_acc = 0.0
+    prev_epoch = 0
     if cfg.ckpt:
-        ckpt = torch.load(cfg.ckpt)['state_dict']
-        new_state_dict = OrderedDict()
-        for k, v in ckpt.items():
-            name = k[7:]
-            new_state_dict[name] = v
-        model.load_state_dict(new_state_dict)
+        ckpt = torch.load(cfg.ckpt)
+        # best_acc = ckpt['acc']
+        # prev_epoch = ckpt['epoch']
+        pretrained = ckpt['state_dict']
+        # pretrained = {k: v for k, v in pretrained.items() if k in model_dict}
+        # model_dict.update(pretrained)
+        model.load_state_dict(pretrained)
     model = torch.nn.DataParallel(model).cuda()
-    '''
-    # 单GPU
-    torch.cuda.set_device(3)
-    model = model.cuda()
-    '''
+
+    if cfg.freeze_params:
+        for layer in ['convnet1','convnet2']:
+                for param in eval('model.module.{}.parameters()'.format(layer)):
+                    param.requires_grad = False
 
     cudnn.benchmark = True
 
-    criterion = JointsMSELoss(use_target_weight=cfg.use_target_weight)
+    # 多图loss
+    criterion = MultiJointsMSELoss(use_target_weight=cfg.use_target_weight,temporal=cfg.stages)
 
     optimizer = optim.Adam(model.parameters(), lr=cfg.lr)
 
-    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
-        optimizer, cfg.lr_step, cfg.lr_factor
-    )
-
-    train_loader = torch.utils.data.DataLoader(
-        H36m(cfg,'data/images',True),
-        batch_size = cfg.batch_size,
-        shuffle = True,
-        num_workers = 1,
-        pin_memory = True
-    )
-
     valid_loader = torch.utils.data.DataLoader(
-        H36m(cfg,'data/images',False),
-        batch_size = cfg.batch_size,
+        MultiH36m(cfg,'data/images',False, cfg.stages),
+        batch_size = cfg.batch_size * 8,
         shuffle = False,
-        num_workers = 1,
+        num_workers = 4,
         pin_memory = True
     )
 
-    best_acc = 0.0
-    for epoch in range(cfg.epoch):
-        lr_scheduler.step()
+    for epoch in range(prev_epoch, cfg.epoch):
 
-        # train(cfg, train_loader, model, criterion, optimizer, epoch)
+        train_loader = torch.utils.data.DataLoader(
+            MultiH36m(cfg, 'data/images', True, cfg.stages, epoch%5),
+            batch_size=cfg.batch_size,
+            shuffle=True,
+            num_workers=4,
+            pin_memory=True
+        )
 
-        acc = validate(cfg, valid_loader, model, criterion)
+        train(cfg, train_loader, model, criterion, optimizer , epoch)
 
-        # if acc > best_acc:
-        #     best_acc = acc
-        #     torch.save({
-        #         'epoch': epoch + 1,
-        #         'model': cfg.model,
-        #         'state_dict': model.state_dict(),
-        #         'acc': acc,
-        #         'optimizer': optimizer.state_dict()
-        #     }, 'checkpoint/{}_epoch_{}'.format(cfg.model, epoch))
+        acc, loss = validate(cfg, valid_loader, model, criterion)
 
+        if acc > best_acc or loss < best_loss:
+            best_loss = loss
+            best_acc = acc
+            torch.save({
+                'epoch': epoch + 1,
+                'model': cfg.model,
+                'state_dict': model.module.state_dict(),
+                'acc': acc,
+                'optimizer': optimizer.state_dict()
+            }, 'checkpoint/{}_epoch_{}'.format(cfg.model, epoch))
+        torch.cuda.empty_cache()
+        cfg.lr *= 0.95
 
 if __name__ == '__main__':
     logging.basicConfig(
         filename="/home/liupeng/workspace/Temporal_2D/log/log_{}".format(cfg.model),
-        filemode="w",
+        filemode="a+",
         format="%(asctime)s-%(name)s-%(levelname)s-%(message)s",
         level=logging.INFO
     )
